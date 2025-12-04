@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Settings</title>
+  <style>
+    body {
+      width: 300px;
+      padding: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h3>CeaseFireFox Settings</h3>
+  
+  <label for="activeTimeInput">Set Active Time (in minutes):</label>
+  <input id="activeTimeInput" type="number" min="1" placeholder="Minutes" />
+
+  <label for="blurredTimeInput">Set Blurred Time (in minutes):</label>
+  <input id="blurredTimeInput" type="number" min="1" placeholder="Minutes" />
+
+  <button id="saveButton">Save</button>
+
+  <script src="options.js"></script>
+</body>
+</html>
