@@ -37,7 +37,7 @@ function parseTimeString(timeString) {
 function blurTabs(blurred) {
   browser.tabs.query({}, (tabs) => {
     tabs.forEach(tab => {
-      browser.tabs.sendMessage(tab.id, { action: blurred ? 'blurText' : 'unblurText' });
+      browser.tabs.sendMessage(tab.id, { action: blurred ? 'breakTime' : 'goTime' });
     });
   });
 }
