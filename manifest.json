@@ -5,7 +5,7 @@
   "description": "Go do something productive, loser",
   "permissions": ["storage", "tabs"],
   "background": {
-    "scripts": ["background.js"],
+    "scripts": ["background.js", "browser-polyfill.js"],
     "persistent": false
   },
   "content_scripts": [

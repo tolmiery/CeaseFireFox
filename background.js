@@ -7,9 +7,9 @@ let allowedStartTime = { hour: 9, minute: 0 };  // Default allowed start time (9
 let allowedEndTime = { hour: 22, minute: 0 };  // Default allowed end time (10:00 PM)
 
 // Set up the initial active time and blurred time when the extension is installed or updated
-chrome.runtime.onInstalled.addListener(() => {
+browser.runtime.onInstalled.addListener(() => {
   console.log("Extension installed");
-  chrome.storage.local.get(['activeTime', 'blurredTime'], (data) => {
+  browser.storage.local.get(['activeTime', 'blurredTime'], (data) => {
     if (data.activeTime) {
       activeTime = data.activeTime;
     }
@@ -35,9 +35,9 @@ function parseTimeString(timeString) {
 }
 
 function blurTabs(blurred) {
-  chrome.tabs.query({}, (tabs) => {
+  browser.tabs.query({}, (tabs) => {
     tabs.forEach(tab => {
-      chrome.tabs.sendMessage(tab.id, { action: blurred ? 'blurText' : 'unblurText' });
+      browser.tabs.sendMessage(tab.id, { action: blurred ? 'blurText' : 'unblurText' });
     });
   });
 }
@@ -147,7 +147,7 @@ function pastCurfew() {
 
 
 // Listen for a message from the options page to update the active time and blurred time
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'setTimes') {
     // Update the active time and blurred time
     activeTime = message.activeTime;
@@ -156,7 +156,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     allowedEndTime = message.allowedEndTime;     // Update end time
 
     // Save the updated settings in storage
-    chrome.storage.local.set({ activeTime, blurredTime, allowedStartTime, allowedEndTime });
+    browser.storage.local.set({ activeTime, blurredTime, allowedStartTime, allowedEndTime });
 
     console.log(`Settings updated - Active Time: ${activeTime / 60000} minutes, Blurred Time: ${blurredTime / 60000} minutes`);
     console.log(`Allowed Hours: ${allowedStartTime.hour}:${allowedStartTime.minute} - ${allowedEndTime.hour}:${allowedEndTime.minute}`);
