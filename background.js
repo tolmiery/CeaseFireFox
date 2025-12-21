@@ -1,34 +1,30 @@
-let activeTime = 30 * 60 * 1000; // Default active time (30 minutes)
-let blurredTime = 10 * 60 * 1000; // Default blurred time (10 minutes)
-let activeTimerId;
-let blurTimerId;
-// I would never actually use these times let's be honest
-let allowedStartTime = { hour: 9, minute: 0 };  // Default allowed start time (9:00 AM)
-let allowedEndTime = { hour: 22, minute: 0 };  // Default allowed end time (10:00 PM)
+let activeTime = 30 * 60 * 1000; 
+let blurredTime = 10 * 60 * 1000; 
+let activeTimerId, blurTimerId;
+let checkActiveIntervalId, checkBlurredIntervalId;
+let allowedStartTime = { hour: 9, minute: 0 };
+let allowedEndTime = { hour: 17, minute: 0 };
+let curfewStatus = false; 
+// blurTimeFinished tracks whether or not it *should* be finished just based on the timer, isBlurTimerRunning tracks if the timer is actually finished or no
+let blurTimeFinished = false;
+let allowedHours = false;
+let isActiveTimerRunning = false;
+let isBlurTimerRunning = false;
 
-// Set up the initial active time and blurred time when the extension is installed or updated
 browser.runtime.onInstalled.addListener(() => {
   console.log("Extension installed");
-  browser.storage.local.get(['activeTime', 'blurredTime'], (data) => {
-    if (data.activeTime) {
-      activeTime = data.activeTime;
-    }
-    if (data.blurredTime) {
-      blurredTime = data.blurredTime;
-    }
-    if (data.allowedStartTime) {
-      allowedStartTime = parseTimeString(data.allowedStartTime);
-    }
-    if (data.allowedEndTime) {
-      allowedEndTime = parseTimeString(data.allowedEndTime);
-    }
+  browser.storage.local.get(['activeTime', 'blurredTime', 'allowedStartTime', 'allowedEndTime', 'curfewStatus'], (data) => {
+    if (data.activeTime) activeTime = data.activeTime;
+    if (data.blurredTime) blurredTime = data.blurredTime;
+    if (data.allowedStartTime) allowedStartTime = data.allowedStartTime;
+    if (data.allowedEndTime) allowedEndTime = data.allowedEndTime;
+    if (data.curfewStatus !== undefined) curfewStatus = data.curfewStatus;
     console.log(`Loaded settings - Active Time: ${activeTime / 60000} minutes, Blurred Time: ${blurredTime / 60000} minutes`);
     console.log(`Allowed Hours: ${allowedStartTime.hour}:${allowedStartTime.minute} - ${allowedEndTime.hour}:${allowedEndTime.minute}`);
-    startActiveTimer(); // Start the timer as soon as the extension is installed
+    startActiveTimer();
   });
 });
 
-// Helper function to parse time strings into objects with hour and minute properties
 function parseTimeString(timeString) {
   const [hour, minute] = timeString.split(':').map(Number);
   return { hour, minute };
@@ -42,77 +38,95 @@ function blurTabs(blurred) {
   });
 }
 
-let checkIntervalId;  // Interval ID for checking if the user is past curfew
+function checkLegality(functionName) {
+  if (isBlurTimerRunning) {
+    console.log(`${functionName}: Blur timer is already running.`);
+    return false;
+  }
+
+  if (isActiveTimerRunning) {
+    console.log(`${functionName}: Active timer is already running.`);
+    return false;
+  }
+}
+
 function startActiveTimer() {
-   console.log(`Allowed Hours: ${allowedStartTime.hour}:${allowedStartTime.minute} - ${allowedEndTime.hour}:${allowedEndTime.minute}`);
+  if (checkLegality('startActiveTimer') === false) return;
+  isActiveTimerRunning = true; 
   console.log("Starting active timer...");
-  // Check immediately if we are within allowed hours and blur if needed
+  // check immediately to avoid delays, then check every second
   curfewCheck();
-  // Set an interval to check every second if we're outside allowed hours
-  checkIntervalId = setInterval(() => {
+  const startActive = Date.now();
+  checkActiveIntervalId = setInterval(() => {
     console.log("Checking if user is past curfew (active)...");
+    const elapsedActiveTime = (Date.now() - startActive) / 1000;
+    console.log(`Elapsed Time: ${elapsedActiveTime} seconds`);
     curfewCheck();
   }, 1000); 
 
-  // Run the active timer for the full active time
   activeTimerId = setTimeout(() => {
     console.log("Active time finished.");
-    blurTabs(true);  // Blur text when active time ends
-    startBlurTimer();  // Start the blurred timer after the active time ends
-    // Clear the checking interval when the active time ends
-    clearInterval(checkIntervalId);
-    clearTimeout(activeTimerId);  // Stop the active timer if we are past curfew
+    blurTabs(true);  
+    clearInterval(checkActiveIntervalId);
+    clearTimeout(activeTimerId);
+    isActiveTimerRunning = false;  
+    startBlurTimer(); 
   }, activeTime);
 }
 
-// Function to check if the user is past curfew when active
 function curfewCheck() {
   if (pastCurfew()) {
-    console.log("Past curfew. Blurring text...");
-    blurTabs(true);  // Blur text if outside allowed hours
-  }
-  else {
-    console.log("Within allowed hours. Unblurring text...");
-    blurTabs(false);  // Unblur text if within allowed hours
+    console.log("Past curfew during active time, blurring text...");
+    blurTabs(true); 
+  } else {
+    console.log("Within allowed hours during active time. Unblurring text...");
+    blurTabs(false); 
   }
 }
 
-
-let blurTimeFinished = false;  // Flag to track if blurred time is finished
-let curfewPassed = false;      // Flag to track if curfew has passed
-
+/*
+The basic gist is that blurring always takes precedent over active time, so for either timer, any blurring
+condition means that we should be blurred. No restarting the active timer if we have crossed into the
+illegal hours zone.
+*/
 function startBlurTimer() {
+  if (checkLegality('startBlurTimer') === false) return;
   console.log("Starting blur timer...");
- console.log(`Allowed Hours: ${allowedStartTime.hour}:${allowedStartTime.minute} - ${allowedEndTime.hour}:${allowedEndTime.minute}`);
-  // Set the blur timer to expire after the specified blurred time
+  isBlurTimerRunning = true; 
+
   blurTimerId = setTimeout(() => {
     console.log("Blur time finished.");
-    blurTimeFinished = true;  // Mark blur time as finished
-    checkAndStartActiveTimer();  // Check if both conditions are met to start the active timer, if curfew no go and likewise if blur time not finished
+    blurTimeFinished = true;  
+    clearTimeout(blurTimerId);
+    checkAndStartActiveTimer();  
   }, blurredTime);
 
-  // Periodically check if curfew is over 
-  checkIntervalId = setInterval(() => {
-    console.log("Checking if curfew has passed (blur)...");
+  const startBlurred = Date.now(); 
+  checkBlurredIntervalId = setInterval(() => {
+    const elapsedBlurTime = (Date.now() - startBlurred) / 1000; 
+    console.log(`Elapsed Time: ${elapsedBlurTime} seconds`);
     if (!pastCurfew()) {
-      console.log("Curfew passed.");
-      curfewPassed = true;  // Mark curfew as passed
-      checkAndStartActiveTimer();  // Check if both conditions are met to start the active timer
-      clearInterval(checkIntervalId);  // Stop checking for curfew
-      clearTimeout(blurTimerId);  // Stop the blur timer if curfew passed early
+      console.log("Allowed hours.");
+      allowedHours = true;
+      checkAndStartActiveTimer();
     }
-  }, 1000);  // Check every 1 second (adjust if needed)
+  }, 1000); 
 }
 
-// Check if both conditions are met to start the active timer
 function checkAndStartActiveTimer() {
-  // Start the active timer only when both conditions are met
-  if (blurTimeFinished && curfewPassed) {
+  console.log(`Checking conditions to start active timer - blurTimeFinished: ${blurTimeFinished}, allowedHours: ${allowedHours}`);
+  if (blurTimeFinished && allowedHours) {
     console.log("Both conditions met. Unblurring text and starting active timer...");
-    blurTabs(false);  // Unblur the text
-    startActiveTimer();  // Start the active timer
-    blurTimeFinished = false;  // Reset blur time flag
-    curfewPassed = false;
+    blurTabs(false);  
+    blurTimeFinished = false; 
+    allowedHours = false; 
+    isBlurTimerRunning = false;  
+    clearInterval(checkBlurredIntervalId); 
+    startActiveTimer(); 
+  } else if (!blurTimeFinished) {
+    console.log("Blur time not finished yet. Waiting...");
+  } else if (!allowedHours) {
+    console.log("Not in allowed hours yet. Waiting...");
   }
 }
 
@@ -125,48 +139,28 @@ function pastCurfew() {
   const currentTimeInMinutes = currentHour * 60 + currentMinute;
   const startTimeInMinutes = allowedStartTime.hour * 60 + allowedStartTime.minute;
   const endTimeInMinutes = allowedEndTime.hour * 60 + allowedEndTime.minute;
-  console.log(`Current Time in minutes: ${currentTimeInMinutes}`);
-  console.log(`Start Time in minutes: ${startTimeInMinutes}`);
-  console.log(`End Time in minutes: ${endTimeInMinutes}`);
-  console.log(`Current Time: ${currentHour}:${currentMinute}`);
-  console.log(`Start Time: ${allowedStartTime.hour}:${allowedStartTime.minute}`);
-  console.log(`End Time: ${allowedEndTime.hour}:${allowedEndTime.minute}`);
-  
+
   // Case 1: Normal range (start < end)
   if (startTimeInMinutes < endTimeInMinutes) {
-    console.log("Normal time range.");
     return !(currentTimeInMinutes >= startTimeInMinutes && currentTimeInMinutes < endTimeInMinutes);
   }
-  
+
   // Case 2: Wrap-around range (start > end, crossing midnight)
-  console.log("Wrap-around time range.");
-  console.log(!(currentTimeInMinutes >= startTimeInMinutes || currentTimeInMinutes < endTimeInMinutes))
   return !(currentTimeInMinutes >= startTimeInMinutes || currentTimeInMinutes < endTimeInMinutes);
 }
 
-
-
-// Listen for a message from the options page to update the active time and blurred time
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'setTimes') {
-    // Update the active time and blurred time
-    activeTime = message.activeTime;
-    blurredTime = message.blurredTime;
-    allowedStartTime = message.allowedStartTime; // Update start time
-    allowedEndTime = message.allowedEndTime;     // Update end time
-
-    // Save the updated settings in storage
-    browser.storage.local.set({ activeTime, blurredTime, allowedStartTime, allowedEndTime });
+    if (message.activeTime) activeTime = message.activeTime;
+    if (message.blurredTime) blurredTime = message.blurredTime;
+    if (message.allowedStartTime) allowedStartTime = message.allowedStartTime;
+    if (message.allowedEndTime) allowedEndTime = message.allowedEndTime;
+    if (message.curfewStatus !== undefined) curfewStatus = message.curfewStatus;
+    browser.storage.local.set({ activeTime, blurredTime, allowedStartTime, allowedEndTime, curfewStatus });
 
     console.log(`Settings updated - Active Time: ${activeTime / 60000} minutes, Blurred Time: ${blurredTime / 60000} minutes`);
     console.log(`Allowed Hours: ${allowedStartTime.hour}:${allowedStartTime.minute} - ${allowedEndTime.hour}:${allowedEndTime.minute}`);
-
-    // Clear existing timers? Maybe.
-    //clearTimeout(activeTimerId);
-    //clearTimeout(blurTimerId);
-    //clearInterval(checkIntervalId);
-
-    // Recheck the allowed hours and reset the timers
-    startActiveTimer(); // Restart the active timer with new settings
+    console.log(`Curfew Status: ${curfewStatus}`);
+    startActiveTimer(); 
   }
 });

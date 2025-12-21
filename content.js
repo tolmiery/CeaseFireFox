@@ -1,4 +1,4 @@
-// blur/unblur all text on the page
+// this is how we make the internet unusable
 function blurText(blurred = false) {
   const elements = document.querySelectorAll('body, body *');
   elements.forEach(element => {
@@ -8,27 +8,35 @@ function blurText(blurred = false) {
   });
 }
 
-// disable/enable all links and buttons on the page to prevent interaction during break time
-function disableLinksAndButtons(disabled = false) {
-  // Disable all <a> elements (links)
-  const links = document.querySelectorAll('a');
-  links.forEach(link => {
-    link.style.pointerEvents = disabled ? 'none' : 'auto'; 
-  });
+/* 
+Disable/enable all interactions on the page during breaks for safety
+Would be bad to accidentally click a link you can't read 
+*/
+function disableEvents(disabled) {
+  document.body.style.pointerEvents = disabled ? 'none' : 'auto';
+  if (disabled) {
+    ['keydown', 'keyup', 'keypress'].forEach(event => 
+      document.addEventListener(event, preventDefaultEvent, true)
+    );
+  } else {
+    ['keydown', 'keyup', 'keypress'].forEach(event => 
+      document.removeEventListener(event, preventDefaultEvent, true)
+    );
+  }
+}
 
-  // Disable all <button> elements
-  const buttons = document.querySelectorAll('button');
-  buttons.forEach(button => {
-    button.disabled = disabled; 
-  });
+function preventDefaultEvent(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  return false;  //
 }
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message.action === 'breakTime') {
     blurText(true);
-    disableLinksAndButtons(true);
+    disableEvents(true);
   } else if (message.action === 'goTime') {
     blurText(false);
-    disableLinksAndButtons(false);
+    disableEvents(false);
   }
 });
